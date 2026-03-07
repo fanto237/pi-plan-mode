@@ -362,6 +362,34 @@ Follow this plan during execution.`;
 		},
 	});
 
+	pi.registerCommand("plan:edit", {
+		description: "Edit plan file in $EDITOR or $VISUAL",
+		handler: async (_args, ctx) => {
+			if (!planModeEnabled || !currentPlanPath) {
+				ctx.ui.notify("No active plan", "error");
+				return;
+			}
+
+			// Get editor from environment variables
+			const editor = process.env.EDITOR || process.env.VISUAL || "vi";
+			const planPath = currentPlanPath;
+
+			ctx.ui.notify(`Opening plan in ${editor}...`, "info");
+
+			// Spawn the editor as a subprocess
+			const { spawn } = await import("node:child_process");
+			const child = spawn(editor, [planPath], {
+				detached: true,
+				stdio: "inherit",
+			});
+
+			// Allow the editor to run in the background
+			child.unref();
+
+			ctx.ui.notify(`Plan edited in ${editor} (PID: ${child.pid})`, "info");
+		},
+	});
+
 	// ── System Prompt Injection ──────────────────────────────────────────────
 
 	pi.on("before_agent_start", async (_event, ctx) => {

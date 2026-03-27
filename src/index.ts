@@ -526,9 +526,34 @@ When the plan is complete, remind the user to use /plan:approve to start executi
 					return; // No model available, allow
 				}
 
-				const apiKey = await ctx.modelRegistry.getApiKey(currentModel);
-				if (!apiKey) {
-					return; // No API key, allow
+				const modelRegistry = ctx.modelRegistry as typeof ctx.modelRegistry & {
+					getApiKey?: (model: typeof currentModel) => Promise<string | undefined>;
+					getApiKeyAndHeaders?: (
+						model: typeof currentModel,
+					) => Promise<
+						| { ok: true; apiKey?: string; headers?: Record<string, string> }
+						| { ok: false; error: string }
+					>;
+				};
+
+				let apiKey: string | undefined;
+				let headers: Record<string, string> | undefined;
+
+				if (typeof modelRegistry.getApiKeyAndHeaders === "function") {
+					const auth = await modelRegistry.getApiKeyAndHeaders(currentModel);
+					if (!auth.ok) {
+						return; // Auth resolution failed, allow
+					}
+					apiKey = auth.apiKey;
+					headers = auth.headers;
+				} else if (typeof modelRegistry.getApiKey === "function") {
+					apiKey = await modelRegistry.getApiKey(currentModel);
+				} else {
+					return; // No compatible auth method, allow
+				}
+
+				if (!apiKey && (!headers || Object.keys(headers).length === 0)) {
+					return; // No request auth, allow
 				}
 
 				const response = await complete(
@@ -549,7 +574,7 @@ When the plan is complete, remind the user to use /plan:approve to start executi
 							},
 						],
 					},
-					{ apiKey, maxTokens: 256 },
+					{ apiKey, headers, maxTokens: 256 },
 				);
 
 				const text = response.content
